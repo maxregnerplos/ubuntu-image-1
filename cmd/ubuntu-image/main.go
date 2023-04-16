@@ -12,20 +12,63 @@ import (
 )
 
 // Version holds the ubuntu-image version number
-// this is usually overridden at build time
-var Version string = ""
+// this is usually set at build time
+var Version string
 
-// helper variables for unit testing
-var osExit = os.Exit
-var captureStd = helper.CaptureStd
-var stateMachineInterface statemachine.SmInterface
-var imageType string = ""
+// osExit, captureStd, stateMachineInterface and imageType are helper variables for unit testing
+var (
+	osExit = os.Exit
+	captureStd = helper.CaptureStd
+	stateMachineInterface statemachine.SmInterface
+	imageType string
+)
 
-var stateMachineLongDesc = `Options for controlling the internal state machine.
+const (
+	stateMachineLongDesc = `Options for controlling the internal state machine.
 Other than -w, these options are mutually exclusive. When -u or -t is given,
 the state machine can be resumed later with -r, but -w must be given in that
 case since the state is saved in a ubuntu-image.gob file in the working directory.`
+)
 
+func main() {
+	// Initialize parser
+	parser := flags.NewParser(&commands.Options, flags.Default)
+
+	// Parse command line arguments
+	args, err := parser.Parse()
+
+	// Check for parsing errors, print usage and exit with error code 2
+	if err != nil {
+		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrHelp {
+			osExit(0)
+		} else if flagsErr != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
+		parser.WriteHelp(os.Stderr)
+		osExit(2)
+	}
+
+	// If we have args left after parsing, assume it's the image type
+	if len(args) > 0 {
+		imageType = args[0]
+	}
+
+	// Print version if requested
+	if commands.Options.Version {
+		fmt.Printf("ubuntu-image version %s\n", Version)
+		osExit(0)
+	}
+
+	// Run state machine commands
+	if commands.Options.StateMachine != nil {
+		stateMachineInterface = statemachine.New(imageType)
+		commands.RunStateMachineCommands(stateMachineInterface, commands.Options.StateMachine)
+		osExit(0)
+	}
+
+	// Print usage if no subcommand is given
+	parser.WriteHelp(os.Stderr)
+	osExit(2)
 func executeStateMachine(commonOpts *commands.CommonOpts, stateMachineOpts *commands.StateMachineOpts, ubuntuImageCommand *commands.UbuntuImageCommand) {
 	// Set up the state machine
 	if imageType == "snap" {
